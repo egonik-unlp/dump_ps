@@ -1,5 +1,4 @@
 const std = @import("std");
-// const database = @import("database.zig");
 const database = @import("database");
 const types = @import("types");
 const process = std.process.Child;
@@ -73,12 +72,10 @@ pub fn main() !void {
         }
         output.deinit();
     }
-
-    const pool = try database.create_connection(gpa.allocator());
+    const pool = try database.create_connection_with_string(gpa.allocator());
     defer pool.deinit();
-    // try database.drop_tables(pool);
     try database.create_event_table(pool);
     try database.create_table(pool);
-    const id = try database.create_event(pool);
-    try database.insert_data_to_table(pool, output.items, id, MAXPROCUPLOAD);
+    const id = try database.create_collection_event(pool);
+    try database.insert_collection_data(pool, output.items, id, MAXPROCUPLOAD);
 }

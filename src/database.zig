@@ -2,6 +2,8 @@ const std = @import("std");
 const pg = @import("pg");
 const types = @import("types");
 const DatabaseError = error{creation_error};
+const secrets = @import("secrets.zig");
+
 const dbrow = struct {
     actual_name: []const u8,
     info_para_reporte: []const u8,
@@ -17,6 +19,8 @@ const dbrow = struct {
         try writer.print("DbRow {{.actual_name : {s}, .info_para_reporte: {s}, .cita: {s} }} ", .{ self.actual_name, self.info_para_reporte, self.cita });
     }
 };
+
+// Connection with local postgres hosted in docker
 pub fn create_connection(allocator: std.mem.Allocator) !*pg.Pool {
     const pool = try pg.Pool.init(allocator, .{ .size = 5, .connect = .{
         .port = 5432,
@@ -29,12 +33,19 @@ pub fn create_connection(allocator: std.mem.Allocator) !*pg.Pool {
     } });
     return pool;
 }
+// Connection to supabase using connection string. String is in secrets.zig, which is not commited.
+pub fn create_connection_with_string(allocator: std.mem.Allocator) !*pg.Pool {
+    const uri = try std.Uri.parse(secrets.string);
+    const pool = try pg.Pool.initUri(allocator, uri, .{ .size = 5, .timeout = 30_000 });
+    return pool;
+}
+
 pub fn create_event_table(pool: *pg.Pool) !void {
     var conn = try pool.acquire();
     defer conn.release();
     _ = try conn.exec("create table if not exists event_logs (id serial primary key, timestamp bigint)", .{});
 }
-pub fn create_event(pool: *pg.Pool) !i32 {
+pub fn create_collection_event(pool: *pg.Pool) !i32 {
     var conn = try pool.acquire();
     defer {
         conn.commit() catch unreachable;
@@ -73,19 +84,16 @@ pub fn create_table(pool: *pg.Pool) !void {
     };
 }
 
-pub fn drop_tables(pool: *pg.Pool) !void {
+pub fn drop_all_tables(pool: *pg.Pool) !void {
     var conn = try pool.acquire();
     defer conn.release();
     _ = try conn.exec("drop table if exists pslines", .{});
     _ = try conn.exec("drop table if exists event_logs", .{});
-    _ = conn.exec("drop table if exists log_events", .{}) catch |err| {
-        std.debug.print("Can't delete log_events err = {}\n", .{err});
-    };
 }
 
 const Log = struct { id: i32, timestamp: i64 };
 
-pub fn get_event(pool: *pg.Pool, last_transaction_id: i32) !void {
+pub fn get_all_events(pool: *pg.Pool, last_transaction_id: i32) !void {
     var conn = try pool.acquire();
     defer conn.release();
     var result = try conn.queryOpts("select * from event_logs", .{}, .{ .column_names = true });
@@ -96,7 +104,7 @@ pub fn get_event(pool: *pg.Pool, last_transaction_id: i32) !void {
     }
 }
 
-pub fn insert_data_to_table(pool: *pg.Pool, instances: []types.PsLine, event_id: i32, MAX: u16) !void {
+pub fn insert_collection_data(pool: *pg.Pool, instances: []types.PsLine, event_id: i32, MAX: u16) !void {
     var conn = try pool.acquire();
     defer conn.release();
     for (instances, 0..) |instance, count| {
