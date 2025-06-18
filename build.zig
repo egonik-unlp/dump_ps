@@ -8,7 +8,12 @@ pub fn build(b: *std.Build) void {
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
     // for restricting supported target set are available.
-    const target = b.standardTargetOptions(.{});
+    const target = b.standardTargetOptions(.{ .default_target = .{
+        .cpu_arch = .x86_64,
+        .os_tag = .linux,
+        .abi = .gnu,
+        .cpu_model = .baseline,
+    } });
 
     // Standard optimization options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
@@ -27,8 +32,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
+    const processor_profiling = b.option(bool, "p", "profile the CPU instead of the RAM") orelse false;
     // We will also create a module for our other entry point, 'main.zig'.
+    if (processor_profiling) {
+        std.debug.print("Compilé versión para perfilado basado en mayores usuarios de cpu\n", .{});
+    } else {
+        std.debug.print("Compilé versión para perfilado basado en mayores usuarios de memoria\n", .{});
+    }
     const exe_mod = b.createModule(.{
         // `root_source_file` is the Zig "entry point" of the module. If a module
         // only contains e.g. external object files, you can make this `null`.
@@ -61,7 +71,7 @@ pub fn build(b: *std.Build) void {
     // This creates another `std.Build.Step.Compile`, but this one builds an executable
     // rather than a static library.
     const exe = b.addExecutable(.{
-        .name = "dump_ps",
+        .name = if (processor_profiling) "dump_ps_proc" else "dump_ps",
         .root_module = exe_mod,
     });
 
@@ -81,9 +91,22 @@ pub fn build(b: *std.Build) void {
     database.addImport("pg", pg.module("pg"));
     database.addImport("types", types);
     exe.root_module.addImport("database", database);
-    b.installArtifact(exe);
-    // exe.root_module.addImport("database", b.createModule(.{ .root_source_file =  }))
+    // const options_module = b.addModule(, options: Module.CreateOptions)
+    // const options_module = b.createModule(.{ .root_source_file = null, .optimize = optimize, .target = target });
+    const options = b.addOptions();
+    options.addOption(bool, "profile_cpu", processor_profiling);
+    // options_module.addOptions("build_options", options);
+    // exe_mod.addImport("build_options", options_module);
+    // database.addImport("build_options", options_module);
+    exe.root_module.addOptions("build_options", options);
+    // database.addOptions("build_options", options);
+    // exe.root_module.addOptions("build_options", options);
 
+    b.installArtifact(exe);
+
+    // exe.root_module.addImport("database", b.createModule(.{ .root_source_file =  }))
+    // when compiling the binary with processor sorting.
+    // exe.out_filename = "dump_ps_proc";
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.

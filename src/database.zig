@@ -2,7 +2,7 @@ const std = @import("std");
 const pg = @import("pg");
 const types = @import("types");
 const DatabaseError = error{creation_error};
-const secrets = @import("secrets.zig");
+// const secrets = @import("secrets.zig");
 
 const dbrow = struct {
     actual_name: []const u8,
@@ -34,8 +34,8 @@ pub fn create_connection(allocator: std.mem.Allocator) !*pg.Pool {
     return pool;
 }
 // Connection to supabase using connection string. String is in secrets.zig, which is not commited.
-pub fn create_connection_with_string(allocator: std.mem.Allocator) !*pg.Pool {
-    const uri = try std.Uri.parse(secrets.string);
+pub fn create_connection_with_string(allocator: std.mem.Allocator, string: []const u8) !*pg.Pool {
+    const uri = try std.Uri.parse(string);
     const pool = try pg.Pool.initUri(allocator, uri, .{ .size = 5, .timeout = 30_000 });
     return pool;
 }

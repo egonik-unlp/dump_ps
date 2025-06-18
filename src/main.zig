@@ -4,7 +4,9 @@ const types = @import("types");
 const process = std.process.Child;
 const pg = @import("pg");
 const MAXPROCUPLOAD: u16 = 20;
-
+const config = @import("config");
+const build_options = @import("build_options");
+const secrets = @import("secrets.zig");
 fn capturePsOutput(allocator: std.mem.Allocator) !std.ArrayList(types.PsLine) {
     var proc = process.init(&[_][]const u8{ "ps", "aux" }, allocator);
     proc.stdout_behavior = .Pipe;
@@ -24,7 +26,9 @@ fn capturePsOutput(allocator: std.mem.Allocator) !std.ArrayList(types.PsLine) {
 }
 fn parsePsLine(allocator: std.mem.Allocator, input: []const u8) !std.ArrayList(types.PsLine) {
     var lines = std.mem.tokenizeAny(u8, input, "\n");
-    _ = lines.next(); // skip headers
+    // skip headers
+    _ = lines.next();
+    //
     var ps = std.ArrayList(types.PsLine).init(allocator);
     errdefer {
         for (ps.items) |*it| {
@@ -43,12 +47,19 @@ fn parsePsLine(allocator: std.mem.Allocator, input: []const u8) !std.ArrayList(t
         for (0..6) |_| {
             _ = tokens.next();
         }
+        //
         const _command = tokens.next() orelse break;
         const command = try allocator.dupe(u8, _command);
         const psline = types.PsLine{ .user = user, .pid = pid, .percent_cpu = percent_cpu, .percent_mem = percent_mem, .command = command };
         try ps.append(psline);
+        // if (config.) {}
     }
-    std.mem.sort(types.PsLine, ps.items, {}, sortLsLinesMem);
+    if (build_options.profile_cpu) {
+        std.mem.sort(types.PsLine, ps.items, {}, sortLsLinesCpu);
+    } else {
+        std.mem.sort(types.PsLine, ps.items, {}, sortLsLinesMem);
+    }
+
     return ps;
 }
 
@@ -72,7 +83,8 @@ pub fn main() !void {
         }
         output.deinit();
     }
-    const pool = try database.create_connection_with_string(gpa.allocator());
+    const string = if (build_options.profile_cpu) secrets.string_proc else secrets.string_mem;
+    const pool = try database.create_connection_with_string(gpa.allocator(), string);
     defer pool.deinit();
     try database.create_event_table(pool);
     try database.create_table(pool);
