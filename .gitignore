@@ -1,2 +1,6 @@
 zig-out/
 .zig-cache/
+secrets.zig
+*error*
+*.log
+*err*
